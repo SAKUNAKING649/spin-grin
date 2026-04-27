@@ -1,20 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { FunWheel } from "@/components/FunWheel";
 import { DARES, fillTemplate } from "@/lib/dares";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, RotateCcw, Trophy } from "lucide-react";
+import { Sparkles, RotateCcw, Trophy, Skull } from "lucide-react";
 
-type Phase = "setup" | "ready" | "spinning" | "result";
-
-const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
-const isSpecialPair = (p1: string, p2: string) => {
-  const triggers = ["saad", "saad waqas"];
-  const a = normalize(p1);
-  const b = normalize(p2);
-  return triggers.includes(a) || triggers.includes(b);
-};
+type Phase = "setup" | "pick-loser" | "spinning" | "result";
 
 const Index = () => {
   const [phase, setPhase] = useState<Phase>("setup");
@@ -24,34 +15,20 @@ const Index = () => {
   const [targetIndex, setTargetIndex] = useState<number | null>(null);
   const [resultText, setResultText] = useState("");
   const [round, setRound] = useState(0);
-  const scriptedSpinsLeft = useRef(0);
 
   const players = useMemo(() => [p1, p2], [p1, p2]);
 
   const handleStart = () => {
     if (!p1.trim() || !p2.trim()) return;
-    // Reset scripted sequence only when special pair, otherwise random from spin 1
-    scriptedSpinsLeft.current = isSpecialPair(p1, p2) ? 3 : 0;
     setRound(0);
-    setPhase("ready");
+    setPhase("pick-loser");
   };
 
-  const pickLoser = () => (Math.random() < 0.5 ? players[0] : players[1]);
-
-  const startSpin = () => {
-    const losingPlayer = pickLoser();
+  const selectLoser = (losingPlayer: string) => {
     const winningPlayer = losingPlayer === players[0] ? players[1] : players[0];
     setLoser(losingPlayer);
 
-    let dareIdx: number;
-    if (scriptedSpinsLeft.current > 0) {
-      // Round 0 -> Hug(0), 1 -> Kiss(1), 2 -> Slap(2)
-      dareIdx = round; // matches DARES order
-      scriptedSpinsLeft.current -= 1;
-    } else {
-      dareIdx = Math.floor(Math.random() * DARES.length);
-    }
-
+    const dareIdx = Math.floor(Math.random() * DARES.length);
     setTargetIndex(dareIdx);
     setResultText(fillTemplate(DARES[dareIdx].label, losingPlayer, winningPlayer));
     setPhase("spinning");
@@ -63,7 +40,7 @@ const Index = () => {
 
   const nextRound = () => {
     setRound((r) => r + 1);
-    setPhase("ready");
+    setPhase("pick-loser");
   };
 
   const resetAll = () => {
@@ -73,7 +50,6 @@ const Index = () => {
     setTargetIndex(null);
     setResultText("");
     setRound(0);
-    scriptedSpinsLeft.current = 0;
     setPhase("setup");
   };
 
@@ -144,12 +120,57 @@ const Index = () => {
         </section>
       )}
 
-      {phase !== "setup" && (
+      {phase === "pick-loser" && (
+        <section className="w-full max-w-md flex flex-col items-center animate-pop-in">
+          <div className="w-full bg-card rounded-3xl p-6 shadow-soft border border-border">
+            <div className="flex items-center gap-2 mb-1">
+              <Skull className="w-4 h-4 text-primary" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Round {round + 1}
+              </span>
+            </div>
+            <h2 className="font-display text-2xl font-bold mb-1">Who lost?</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              Tap the player who has to face the punishment.
+            </p>
+
+            <div className="flex gap-3">
+              {players.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => selectLoser(name)}
+                  className="flex-1 flex flex-col items-center gap-3 p-4 rounded-2xl border-2 border-border bg-background hover:border-primary hover:bg-primary/5 active:scale-95 transition-all duration-150 group"
+                >
+                  <div className="w-14 h-14 rounded-full bg-gradient-warm text-primary-foreground flex items-center justify-center font-display font-bold text-2xl shadow-pop group-hover:scale-105 transition-transform">
+                    {name.trim().charAt(0).toUpperCase()}
+                  </div>
+                  <span className="font-display font-bold text-base leading-tight truncate w-full text-center">
+                    {name}
+                  </span>
+                  <span className="text-xs text-muted-foreground group-hover:text-primary transition-colors font-medium">
+                    I lost
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={resetAll}
+            className="mt-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Change players
+          </button>
+        </section>
+      )}
+
+      {(phase === "spinning" || phase === "result") && (
         <section className="w-full max-w-md flex flex-col items-center">
           <div className="flex w-full justify-between items-center mb-5 px-1">
-            <PlayerChip name={p1} side="left" />
+            <PlayerChip name={p1} side="left" isLoser={loser === p1} />
             <span className="font-hand text-2xl text-muted-foreground">vs</span>
-            <PlayerChip name={p2} side="right" />
+            <PlayerChip name={p2} side="right" isLoser={loser === p2} />
           </div>
 
           <FunWheel
@@ -160,15 +181,6 @@ const Index = () => {
           />
 
           <div className="mt-7 w-full">
-            {phase === "ready" && (
-              <Button
-                onClick={startSpin}
-                className="w-full h-14 rounded-2xl text-lg font-semibold bg-gradient-warm shadow-pop"
-              >
-                {round === 0 ? "Spin the wheel" : "Spin again"}
-              </Button>
-            )}
-
             {phase === "spinning" && (
               <p className="text-center font-hand text-3xl text-primary animate-pulse">
                 spinning…
@@ -214,18 +226,18 @@ const Index = () => {
   );
 };
 
-const PlayerChip = ({ name, side }: { name: string; side: "left" | "right" }) => {
+const PlayerChip = ({ name, side, isLoser }: { name: string; side: "left" | "right"; isLoser?: boolean }) => {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   return (
     <div className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
-      <div className="w-10 h-10 rounded-full bg-gradient-warm text-primary-foreground flex items-center justify-center font-display font-bold text-lg shadow-pop">
+      <div className={`w-10 h-10 rounded-full text-primary-foreground flex items-center justify-center font-display font-bold text-lg shadow-pop transition-all ${isLoser ? "bg-primary ring-2 ring-primary ring-offset-2 ring-offset-background" : "bg-gradient-warm"}`}>
         {initial}
       </div>
       <div className={`flex flex-col ${side === "right" ? "items-end" : "items-start"}`}>
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Player {side === "left" ? "1" : "2"}
+          {isLoser ? "loser" : `Player ${side === "left" ? "1" : "2"}`}
         </span>
-        <span className="font-display font-bold text-base leading-tight max-w-[110px] truncate">
+        <span className={`font-display font-bold text-base leading-tight max-w-[110px] truncate ${isLoser ? "text-primary" : ""}`}>
           {name}
         </span>
       </div>
