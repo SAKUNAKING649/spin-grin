@@ -15,4 +15,4 @@ export const DARES: Dare[] = [
 ];
 
 export const fillTemplate = (template: string, loser: string, winner: string) =>
-  template.replaceAll("{loser}", loser).replaceAll("{winner}", winner);
+  template.split("{loser}").join(loser).split("{winner}").join(winner);
